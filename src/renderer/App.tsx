@@ -3,6 +3,7 @@ import icon from '../../assets/icon.svg';
 import './App.css';
 import { useContext, useEffect, useState } from 'react';
 import { AppContextProvider, useAppContext } from '../context/audiocontext';
+import { v4 as uuidv4 } from 'uuid';
 
 // https://stackoverflow.com/questions/3115982/how-to-check-if-two-arrays-are-equal-with-javascript
 function arraysEqual(a: any[], b: any[], compareFnc: ((a: string, b: string) => number)) {
@@ -83,15 +84,54 @@ function Hello() {
     
       console.log("successfully added module " + workletUrl);
     });
+
+    window.electron.ipcRenderer.on("get-plugin", async (_arg) => {
+      const arg = (_arg as string[]);
+      if (arg.length !== 3) return;
+    
+      const pluginHtml = arg[0];
+      const pluginJs = arg[1];
+      const pluginName = arg[2];
+    
+      // load plugin html
+      const container = document.createElement("div");
+      container.id = uuidv4();
+      container.classList.add("plugin");
+      container.innerHTML = pluginHtml;
+
+      document.body.appendChild(container);
+
+      // load and execute plugin js
+      // console.log(Function(pluginJs)());
+
+      const plugin = eval(pluginJs);
+      plugin(container.id, new AudioWorkletNode(ctx.audioContext, pluginName));
+
+      // @ts-ignore
+      // plugin(container.id, "SimpleDistortion");
+
+      console.log("successfully added plugin html");
+    });
   }, []);
 
   useEffect(() => {
     reloadPlugins();
   });
 
+  const openPlugin = (plugin:string) => {
+    window.electron.ipcRenderer.sendMessage('get-plugin', [plugin]);
+  };
+
   return (
     <div className='plugin_list'>
-      {plugins.map(v => {return <button key={plugins.indexOf(v)}>{v}</button>})}
+      {plugins.map(v => {
+        return <button 
+            key={plugins.indexOf(v)}
+            onClick={() => openPlugin(v)}
+          >
+            {v}
+          </button>
+      })}
       <button onClick={reloadPlugins}>reload</button>
     </div>
   );

@@ -43,6 +43,23 @@ ipcMain.on('get-plugin-content', async (event, arg: string[]) => {
   event.reply('get-plugin-content', [content]);
 });
 
+ipcMain.on('get-plugin', async (event, arg: string[]) => {
+  if (arg.length !== 1) return;
+
+  const pluginName = arg[0];
+  const pluginPath = "plugins/" + pluginName;
+
+  const htmlPath = pluginPath + "/plugin.html";
+  if (!fs.existsSync(htmlPath)) return;
+  const htmlContent = fs.readFileSync(htmlPath, "utf-8");
+
+  const hostPath = pluginPath + "/host.js";
+  if (!fs.existsSync(hostPath)) return;
+  const jsContent = fs.readFileSync(hostPath, "utf-8");
+
+  event.reply('get-plugin', [htmlContent, jsContent, pluginName]);
+});
+
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
   sourceMapSupport.install();
