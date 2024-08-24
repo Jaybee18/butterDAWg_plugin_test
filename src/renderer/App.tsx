@@ -4,6 +4,7 @@ import './App.css';
 import { useContext, useEffect, useState } from 'react';
 import { AppContextProvider, useAppContext } from '../context/audiocontext';
 import { v4 as uuidv4 } from 'uuid';
+import { WaveFile } from 'wavefile';
 
 // https://stackoverflow.com/questions/3115982/how-to-check-if-two-arrays-are-equal-with-javascript
 function arraysEqual(a: any[], b: any[], compareFnc: ((a: string, b: string) => number)) {
@@ -95,22 +96,41 @@ function Hello() {
     
       // load plugin html
       const container = document.createElement("div");
-      container.id = uuidv4();
+      container.id = "i" + uuidv4();
       container.classList.add("plugin");
       container.innerHTML = pluginHtml;
 
       document.body.appendChild(container);
 
-      // load and execute plugin js
-      // console.log(Function(pluginJs)());
-
+      // load plugin js
       const plugin = eval(pluginJs);
-      plugin(container.id, new AudioWorkletNode(ctx.audioContext, pluginName));
-
-      // @ts-ignore
-      // plugin(container.id, "SimpleDistortion");
+      const newAudioNode = new AudioWorkletNode(ctx.audioContext, pluginName);
+      plugin(container.id, newAudioNode);
+      
+      // add the new plugin to the global plugin chain
+      if (ctx.pluginChain.length > 0) {
+        const prevNode = ctx.pluginChain[ctx.pluginChain.length - 1];
+        prevNode.disconnect();
+        ctx.pluginChain[ctx.pluginChain.length - 1].connect(newAudioNode);
+      }
+      ctx.pluginChain.push(newAudioNode);
+      newAudioNode.connect(ctx.audioContext.destination);
 
       console.log("successfully added plugin html");
+    });
+
+    window.electron.ipcRenderer.on("load-sample", async (_arg) => {
+      const files = (_arg as string[]);
+      for (let i = 0; i < files.length; i+=2) {
+        const fileName = files[i];
+        const fileContent = files[i + 1];
+
+        const waveFile = new WaveFile();
+        waveFile.fromBase64(fileContent);
+
+        ctx.samples[fileName] = waveFile;
+      }
+      console.log("loaded sample. try again");
     });
   }, []);
 
@@ -120,6 +140,32 @@ function Hello() {
 
   const openPlugin = (plugin:string) => {
     window.electron.ipcRenderer.sendMessage('get-plugin', [plugin]);
+  };
+
+  const playSound = () => {
+    if (!Object.keys(ctx.samples).includes("eval.wav")) {
+      window.electron.ipcRenderer.sendMessage('load-sample', ["eval.wav"]);
+      console.log("loading sample");
+      return;
+    }
+
+    let tmp = Float32Array.from(ctx.samples["eval.wav"].getSamples(true));
+    let buffer = ctx.audioContext.createBuffer(2, tmp.length, ctx.audioContext.sampleRate*2);
+    buffer.copyToChannel(tmp, 0);
+    buffer.copyToChannel(tmp, 1);
+
+    const sourceNode = new AudioBufferSourceNode(ctx.audioContext, {
+      buffer: buffer
+    })
+
+    if (ctx.pluginChain.length > 0) {
+      const firstAudioNode = ctx.pluginChain[0];
+      sourceNode.connect(firstAudioNode);
+      sourceNode.start();
+    } else {
+      sourceNode.connect(ctx.audioContext.destination);
+      sourceNode.start();
+    }
   };
 
   return (
@@ -133,6 +179,7 @@ function Hello() {
           </button>
       })}
       <button onClick={reloadPlugins}>reload</button>
+      <button onClick={playSound}>play sound</button>
     </div>
   );
 }

@@ -24,6 +24,8 @@ class SimpleDistortion extends AudioWorkletProcessor {
       for (let i = 0; i < input[channel].length; i++) {
         if (input[channel][i] === 0) {
           output[channel][i] = 0;
+        } if (parameters.drive[0] < 0.1) {
+          output[channel][i] = input[channel][i];
         } else {
           output[channel][i] = (input[channel][i]/Math.abs(input[channel][i])) * (1 - Math.exp(-Math.abs((input[channel][i] * Math.max(parameters.drive[0]*40, 1)))));
           output[channel][i] = this.distortion_function(
