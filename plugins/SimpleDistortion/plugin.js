@@ -1,3 +1,6 @@
+// import with require:
+// const w = require("wavefile")
+
 class SimpleDistortion extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [

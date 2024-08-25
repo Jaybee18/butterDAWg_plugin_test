@@ -1,10 +1,9 @@
-import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
-import icon from '../../assets/icon.svg';
-import './App.css';
-import { useContext, useEffect, useState } from 'react';
 import { AppContextProvider, useAppContext } from '../context/audiocontext';
+import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { WaveFile } from 'wavefile';
+import './App.css';
 
 // https://stackoverflow.com/questions/3115982/how-to-check-if-two-arrays-are-equal-with-javascript
 function arraysEqual(a: any[], b: any[], compareFnc: ((a: string, b: string) => number)) {
@@ -96,6 +95,7 @@ function Hello() {
     
       // load plugin html
       const container = document.createElement("div");
+      // ids have to start with a letter for .querySelector()
       container.id = "i" + uuidv4();
       container.classList.add("plugin");
       container.innerHTML = pluginHtml;
@@ -144,9 +144,13 @@ function Hello() {
 
   const playSound = () => {
     if (!Object.keys(ctx.samples).includes("eval.wav")) {
-      window.electron.ipcRenderer.sendMessage('load-sample', ["eval.wav"]);
-      console.log("loading sample");
-      return;
+      // window.electron.ipcRenderer.sendMessage('load-sample', ["eval.wav"]);
+      const file = new WaveFile(window.electron.readFileSync("eval.wav"));
+      if (file.bitDepth !== "32f") {
+        file.toBitDepth("32f");
+      }
+      ctx.samples["eval.wav"] = file;
+      console.log("loaded sample");
     }
 
     let tmp = Float32Array.from(ctx.samples["eval.wav"].getSamples(true));

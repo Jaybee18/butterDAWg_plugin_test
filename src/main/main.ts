@@ -61,22 +61,6 @@ ipcMain.on('get-plugin', async (event, arg: string[]) => {
   event.reply('get-plugin', [htmlContent, jsContent, pluginName]);
 });
 
-ipcMain.on('load-sample', async (event, fileNames: string[]) => {
-  const res = [];
-
-  for (let i = 0; i < fileNames.length; i++) {
-    const file = new WaveFile(readFileSync(fileNames[i]));
-    if (file.bitDepth !== "32f") {
-			file.toBitDepth("32f");
-		}
-    const encoded = file.toBase64();
-    res.push(fileNames[i]);
-    res.push(encoded);
-  }
-
-  event.reply('load-sample', res);
-});
-
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
   sourceMapSupport.install();
