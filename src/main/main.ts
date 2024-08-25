@@ -44,7 +44,7 @@ ipcMain.on('get-plugin-content', async (event, arg: string[]) => {
   event.reply('get-plugin-content', [content]);
 });
 
-ipcMain.on('get-plugin', async (event, arg: string[]) => {
+ipcMain.on('add-plugin', async (event, arg: string[]) => {
   if (arg.length !== 1) return;
 
   const pluginName = arg[0];
@@ -58,7 +58,7 @@ ipcMain.on('get-plugin', async (event, arg: string[]) => {
   if (!fs.existsSync(hostPath)) return;
   const jsContent = fs.readFileSync(hostPath, "utf-8");
 
-  event.reply('get-plugin', [htmlContent, jsContent, pluginName]);
+  event.reply('add-plugin', [htmlContent, jsContent, pluginName]);
 });
 
 if (process.env.NODE_ENV === 'production') {

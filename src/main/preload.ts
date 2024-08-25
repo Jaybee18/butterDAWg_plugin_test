@@ -1,7 +1,7 @@
 // Disable no-unused-vars, broken for spread args
 /* eslint no-unused-vars: off */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 
 export type Channels = string;
 
@@ -24,6 +24,8 @@ const electronHandler = {
     },
   },
   readFileSync,
+  readdirSync,
+  existsSync,
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

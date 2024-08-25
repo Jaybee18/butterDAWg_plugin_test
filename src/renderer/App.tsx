@@ -26,6 +26,8 @@ function arraysEqual(a: any[], b: any[], compareFnc: ((a: string, b: string) => 
 
 function Hello() {
   const [plugins, setPlugins] = useState<string[]>([]);
+  const [pluginChain, setPluginChain] = useState<string[]>([]);
+  const [soundLibrary, setSoundLibrary] = useState<string[]>([]);
   const ctx = useAppContext();
 
 
@@ -85,7 +87,7 @@ function Hello() {
       console.log("successfully added module " + workletUrl);
     });
 
-    window.electron.ipcRenderer.on("get-plugin", async (_arg) => {
+    window.electron.ipcRenderer.on("add-plugin", async (_arg) => {
       const arg = (_arg as string[]);
       if (arg.length !== 3) return;
     
@@ -93,28 +95,22 @@ function Hello() {
       const pluginJs = arg[1];
       const pluginName = arg[2];
     
-      // load plugin html
-      const container = document.createElement("div");
-      // ids have to start with a letter for .querySelector()
-      container.id = "i" + uuidv4();
-      container.classList.add("plugin");
-      container.innerHTML = pluginHtml;
-
-      document.body.appendChild(container);
-
-      // load plugin js
-      const plugin = eval(pluginJs);
       const newAudioNode = new AudioWorkletNode(ctx.audioContext, pluginName);
-      plugin(container.id, newAudioNode);
       
       // add the new plugin to the global plugin chain
       if (ctx.pluginChain.length > 0) {
-        const prevNode = ctx.pluginChain[ctx.pluginChain.length - 1];
+        const prevNode = ctx.pluginChain[ctx.pluginChain.length - 1].audioNode;
         prevNode.disconnect();
-        ctx.pluginChain[ctx.pluginChain.length - 1].connect(newAudioNode);
+        prevNode.connect(newAudioNode);
       }
-      ctx.pluginChain.push(newAudioNode);
+      ctx.pluginChain.push({
+        audioNode: newAudioNode,
+        plugin: pluginName,
+        id: "i" + uuidv4(),
+      });
       newAudioNode.connect(ctx.audioContext.destination);
+
+      updatePluginChain();
 
       console.log("successfully added plugin html");
     });
@@ -132,28 +128,67 @@ function Hello() {
       }
       console.log("loaded sample. try again");
     });
+
+    reloadPlugins();
+    updatePluginChain();
+    reloadSoundLibrary();
   }, []);
 
-  useEffect(() => {
-    reloadPlugins();
-  });
 
-  const openPlugin = (plugin:string) => {
-    window.electron.ipcRenderer.sendMessage('get-plugin', [plugin]);
+  const addPlugin = (plugin: string) => {
+    window.electron.ipcRenderer.sendMessage('add-plugin', [plugin]);
   };
 
-  const playSound = () => {
-    if (!Object.keys(ctx.samples).includes("eval.wav")) {
-      // window.electron.ipcRenderer.sendMessage('load-sample', ["eval.wav"]);
-      const file = new WaveFile(window.electron.readFileSync("eval.wav"));
+  const getPluginWithIdFromChain = (id: string) => {
+    return ctx.pluginChain.find(v => v.id === id);
+  }
+
+  const isPluginOpen = (id: string) => {
+    return document.getElementById(id) !== null;
+  }
+
+  const openPlugin = (id: string) => {
+    if (isPluginOpen(id)) return;
+
+    const plugin = getPluginWithIdFromChain(id);
+    if (plugin === undefined) return;
+
+    const pluginPath = "plugins/" + plugin.plugin;
+  
+    const htmlPath = pluginPath + "/plugin.html";
+    if (!window.electron.existsSync(htmlPath)) return;
+    const htmlContent = window.electron.readFileSync(htmlPath, "utf-8");
+  
+    const hostPath = pluginPath + "/host.js";
+    if (!window.electron.existsSync(hostPath)) return;
+    const jsContent = window.electron.readFileSync(hostPath, "utf-8");
+
+    // load plugin html
+    const container = document.createElement("div");
+    // ids have to start with a letter for .querySelector()
+    container.id = plugin.id;
+    container.classList.add("plugin");
+    container.innerHTML = htmlContent;
+
+    document.body.appendChild(container);
+
+    // load plugin js
+    const initializePlugin = eval(jsContent);
+    initializePlugin(container.id, plugin.audioNode);
+  };
+
+  const playSound = (fileName: string) => {
+    const path = "sounds/" + fileName;
+    if (!Object.keys(ctx.samples).includes(path)) {
+      const file = new WaveFile(window.electron.readFileSync(path));
       if (file.bitDepth !== "32f") {
         file.toBitDepth("32f");
       }
-      ctx.samples["eval.wav"] = file;
+      ctx.samples[path] = file;
       console.log("loaded sample");
     }
 
-    let tmp = Float32Array.from(ctx.samples["eval.wav"].getSamples(true));
+    let tmp = Float32Array.from(ctx.samples[path].getSamples(true));
     let buffer = ctx.audioContext.createBuffer(2, tmp.length, ctx.audioContext.sampleRate*2);
     buffer.copyToChannel(tmp, 0);
     buffer.copyToChannel(tmp, 1);
@@ -163,7 +198,7 @@ function Hello() {
     })
 
     if (ctx.pluginChain.length > 0) {
-      const firstAudioNode = ctx.pluginChain[0];
+      const firstAudioNode = ctx.pluginChain[0].audioNode;
       sourceNode.connect(firstAudioNode);
       sourceNode.start();
     } else {
@@ -172,18 +207,58 @@ function Hello() {
     }
   };
 
+  const updatePluginChain = () => {
+    const currentChain = ctx.pluginChain.map(v => v.plugin);
+    setPluginChain(currentChain);
+  };
+
+  const reloadSoundLibrary = () => {
+    const currentSounds = window.electron.readdirSync("sounds/");
+    setSoundLibrary(currentSounds);
+  };
+
   return (
-    <div className='plugin_list'>
-      {plugins.map(v => {
-        return <button 
-            key={plugins.indexOf(v)}
-            onClick={() => openPlugin(v)}
+    <div className='list_container'>
+      <div className='plugin_list'>
+        <p>Plugin list</p>
+        {plugins.map((v, i) => {
+          return <button 
+          key={i}
+          onClick={() => addPlugin(v)}
+          >
+              {v}
+            </button>
+        })}
+        <button onClick={reloadPlugins}>reload</button>
+      </div>
+      <div className='plugin_chain'>
+        <p>Plugin chain</p>
+        {pluginChain.map((v, i) => {
+          return <button
+            key={i}
+            onClick={() => {
+              openPlugin(ctx.pluginChain[i].id);
+            }}
           >
             {v}
           </button>
-      })}
-      <button onClick={reloadPlugins}>reload</button>
-      <button onClick={playSound}>play sound</button>
+        })}
+        <button onClick={updatePluginChain}>update</button>
+      </div>
+      <div className='sound_library'>
+        <p>Sound library</p>
+        {soundLibrary.map((v, i) => {
+          return <button
+            key={i}
+            onClick={() => {
+              playSound(v);
+            }}
+          >
+            {v}
+          </button>
+        })}
+        <button onClick={reloadSoundLibrary}>update</button>
+      </div>
     </div>
   );
 }

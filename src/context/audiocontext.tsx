@@ -4,7 +4,7 @@ import { WaveFile } from "wavefile";
 interface AppContext {
     audioContext: AudioContext;
     loadedPlugins: string[];
-    pluginChain: AudioNode[];
+    pluginChain: {audioNode: AudioNode, plugin: string, id: string}[];
     samples: {[name: string] : WaveFile};
 }
 
@@ -18,7 +18,7 @@ export const AppContextProvider: React.FC<AppContextProviderProps> = ({children}
     const audioContext = new AudioContext({sampleRate: 44100});
     audioContext.resume();
     const loadedPlugins: string[] = [];
-    const pluginChain: AudioNode[] = [];
+    const pluginChain: {audioNode: AudioNode, plugin: string, id: string}[] = [];
     const samples = {};
     return (
         <AppContextComp.Provider
